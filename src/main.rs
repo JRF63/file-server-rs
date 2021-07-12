@@ -10,7 +10,7 @@ use rocket::http;
 use rocket_dyn_templates::Template;
 use serde::Serialize;
 
-const DOWNLOAD_DIR: &str = r#"C:\Users\Rafael\Downloads"#;
+const FILES_DIR: &str = r#"C:\Users\Rafael\Downloads"#;
 const UPLOAD_SIZE_LIMIT: u64 = 256;
 
 #[derive(Serialize)]
@@ -47,9 +47,8 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
 }
 
 #[get("/<url_path..>", rank = 11)]
-async fn index(url_path: PathBuf) -> Option<Template> {
-    dbg!(&url_path);
-    let local_path = Path::new(DOWNLOAD_DIR).join(&url_path);
+async fn page_indexer(url_path: PathBuf) -> Option<Template> {
+    let local_path = Path::new(FILES_DIR).join(&url_path);
     match get_dir_contents(&local_path).await {
         Ok(contents) => {
             let context = TemplateContext {
@@ -70,15 +69,10 @@ async fn favicon() -> Option<NamedFile> {
     NamedFile::open(path).await.ok()
 }
 
-#[get("/upload")]
-async fn upload_page() -> Template {
-    Template::render("upload", ())
-}
-
 #[launch]
 fn rocket() -> _ {
     rocket::build()
-        .mount("/", routes![favicon, index, upload::upload_handler, upload_page])
-        .mount("/", FileServer::from(DOWNLOAD_DIR))
+        .mount("/", routes![favicon, page_indexer, upload::upload_handler])
+        .mount("/", FileServer::from(FILES_DIR))
         .attach(Template::fairing())
 }
