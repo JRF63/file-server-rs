@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+        <link rel="icon" href="/favicon.png">
         <title>File server</title>
         <style>
             body {
@@ -13,11 +14,6 @@
             a {
                 color: hsl(0, 0%, 90%);
                 text-decoration: none;
-            }
-            #upload {
-                opacity: 0;
-                position: absolute;
-                z-index: -1;
             }
 
             .Header {
@@ -33,6 +29,11 @@
             .UploadLabel {
                 cursor: pointer;
             }
+            .Invisible {
+                opacity: 0;
+                position: absolute;
+                z-index: -1;
+            }
             .DirWrap {
                 display: flex;
                 flex-direction: column;
@@ -46,7 +47,6 @@
                 height: 2rem;
                 padding: 1rem;
             }
-
             .Svg {
                 flex: none;
                 width: 2rem;
@@ -87,7 +87,7 @@
                     <svg class="Svg">
                         <use xlink:href="#cloud"></use>
                     </svg>
-                    <input id="upload" name="files" type="file" accept="image/*, video/*" onchange="form.submit()" multiple/>
+                    <input class="Invisible" name="files" type="file" accept="image/*, video/*" onchange="form.submit()" multiple/>
                 </label>
             </form>
         </div>

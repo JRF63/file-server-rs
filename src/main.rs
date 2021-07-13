@@ -63,9 +63,9 @@ async fn page_indexer(url_path: PathBuf) -> Option<Template> {
     }
 }
 
-#[get("/favicon.ico")]
+#[get("/favicon.png")]
 async fn favicon() -> Option<NamedFile> {
-    let path = Path::new(relative!("static/favicon.ico"));
+    let path = Path::new(relative!("static/favicon.png"));
     NamedFile::open(path).await.ok()
 }
 
