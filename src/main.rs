@@ -20,16 +20,25 @@ struct DirContent {
     url: String,
     file_name: String,
     svg_icon: &'static str,
+    size: u64,
+    time: u64,
+}
+
+#[derive(Serialize)]
+struct Breadcrumb {
+    url: String,
+    segment: String,
 }
 
 #[derive(Serialize)]
 struct TemplateContext {
-    url_path: String,
+    breadcrumbs: Vec<Breadcrumb>,
     contents: Vec<DirContent>,
 }
 
 async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
-    // use std::os::windows::fs::MetadataExt;
+    use std::os::windows::fs::MetadataExt;
+
     let mut directories = vec![];
     let mut files = vec![];
     let mut dir_reader = rocket::tokio::fs::read_dir(dir_path).await?;
@@ -52,6 +61,8 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
             url,
             file_name,
             svg_icon: icon,
+            size: metadata.file_size(),
+            time: metadata.last_write_time(),
         })
     }
     directories.append(&mut files);
@@ -62,8 +73,24 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
 async fn page_indexer(url_path: PathBuf) -> Option<Template> {
     let local_path = Path::new(FILES_DIR).join(&url_path);
     let contents = get_dir_contents(&local_path).await.ok()?;
+
+    let breadcrumbs = {
+        let mut tmp = Vec::new();
+        let mut url = String::new();
+        for component in url_path.components().rev() {
+            let segment = component.as_os_str().to_str()?.to_owned();
+            tmp.push(Breadcrumb {
+                url: url.clone(),
+                segment,
+            });
+            url.push_str("../");
+        }
+        tmp.reverse();
+        tmp
+    }; 
+
     let context = TemplateContext {
-        url_path: url_path.to_string_lossy().into_owned().replace("\\", "/"),
+        breadcrumbs,
         contents,
     };
     Some(Template::render("main", &context))

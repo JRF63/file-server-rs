@@ -92,14 +92,21 @@
     <div class="Header">
         <a href="/">
             <svg class="Svg">
-                <use xlink:href="#home"></use>
+                <use href="#home"></use>
             </svg>
         </a>
-        <div class="Breadcrumbs"></div>
+        <div class="Breadcrumbs">
+            {{#each breadcrumbs}}
+            <svg class="CrumbCaret">
+                <use href="#caret"></use>
+            </svg>
+            <a class="Breadcrumb" href="{{this.url}}">{{this.segment}}</a>
+            {{~/each}}
+        </div>
         <form method="POST" enctype="multipart/form-data">
             <label class="UploadLabel">
                 <svg class="Svg UploadSvg">
-                    <use xlink:href="#cloud"></use>
+                    <use href="#cloud"></use>
                 </svg>
                 <input class="NoDisplay" name="files" type="file" accept="image/*, video/*" onchange="form.submit()" multiple/>
             </label>
@@ -110,7 +117,7 @@
         {{#each contents}}
         <a href="{{this.url}}" class="ListItem">
             <svg class="Svg">
-                <use xlink:href="#{{this.svg_icon}}"></use>
+                <use href="#{{this.svg_icon}}"></use>
             </svg>
             <div>{{this.file_name}}</div>
         </a>
@@ -118,49 +125,8 @@
     </div>
 </body>
 <script>
-
-document.body.onload = addBreadcrumbs;
-
-function createCrumb(segment, link) {
-    const crumb = document.createElement("a");
-    const newContent = document.createTextNode(decodeURIComponent(segment));
-    crumb.appendChild(newContent);
-    crumb.className = "Breadcrumb";
-    return crumb;
-}
-
-function createCaret() {
-    const svgns = "http://www.w3.org/2000/svg";
-    const caret = document.createElementNS(svgns, "svg");
-    const use = document.createElementNS(svgns, "use");
-    use.setAttribute("href", "#caret");
-    caret.appendChild(use);
-    caret.className.baseVal = "CrumbCaret";
-    return caret;
-}
-
-function addBreadcrumbs() {
-    const path = document.location.pathname;
-    const segments = path.split("/");
-
+document.body.onload = function() {
     const container = document.getElementsByClassName("Breadcrumbs")[0];
-    for (var i = 0; i < segments.length; i++) {
-        if (segments[i] == "") {
-            continue;
-        }
-        container.appendChild(createCaret());
-        container.appendChild(createCrumb(segments[i]));
-    }
-
-    const breadcrumbs = container.children;
-    var link = "../";
-    for (var i = breadcrumbs.length - 3; i >= 0; i--) {
-        const child = breadcrumbs[i];
-        if (child.tagName == "A") {
-            child.setAttribute("href", link);
-            link += "../";
-        }
-    }
     container.scrollLeft = container.scrollWidth;
 }
 </script>
