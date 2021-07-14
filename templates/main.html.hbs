@@ -9,13 +9,12 @@
         body {
             background-color: hsl(0, 0%, 10%);
             color: hsl(0, 0%, 90%);
-            font-family: "Robot";
+            font-family: "Roboto";
         }
         a {
-            color: hsl(0, 0%, 90%);
+            color: currentColor;
             text-decoration: none;
         }
-
         .Header {
             display: flex;
             align-items: center;
@@ -32,6 +31,7 @@
             justify-content: left;
         }
         .Breadcrumb {
+            white-space: nowrap;
             margin: 0.3rem;
         }
         .CrumbCaret {
@@ -52,14 +52,35 @@
         .ListItem {
             display: flex;
             align-items: center;
+            padding: 0.6rem 1rem;
+        }
+        .ItemInfo {
+            flex: 1;
+            display: flex;
             overflow: hidden;
-            height: 2rem;
-            padding: 1rem;
+            flex-direction: column;
+            justify-content: center;
+            height: 3rem;
+        }
+        .FileName {
+            overflow: hidden;
+            text-overflow: ellipsis ellipsis;
+            white-space: nowrap;
+            padding: 0.25rem 0;
+        }
+        .Metadata {
+            display: flex;
+            font-size: x-small;
+            padding: 0.25rem 0;
+            color: hsl(0, 0%, 60%);
+        }
+        .FileSize {
+            margin-left: auto;
         }
         .Svg {
             flex: none;
-            width: 2rem;
-            height: 2rem;
+            width: 2.5rem;
+            height: 2.5rem;
             padding-right: 0.5rem;
         }
         .UploadSvg {
@@ -119,7 +140,13 @@
             <svg class="Svg">
                 <use href="#{{this.svg_icon}}"></use>
             </svg>
-            <div>{{this.file_name}}</div>
+            <div class="ItemInfo">
+                <div class="FileName">{{this.file_name}}</div>
+                <div class="Metadata">
+                    <div>{{this.date}}</div>
+                    <div class="FileSize">{{this.size}}</div>
+                </div>
+            </div>
         </a>
         {{~/each}}
     </div>

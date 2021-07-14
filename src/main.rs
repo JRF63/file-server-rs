@@ -3,14 +3,15 @@ extern crate rocket;
 
 mod config;
 mod upload;
-
-use std::path::{Path, PathBuf};
+mod windows;
 
 use rocket::fs::{relative, FileServer, NamedFile};
 use rocket::http;
 use rocket::Request;
 use rocket_dyn_templates::Template;
 use serde::Serialize;
+
+use std::path::{Path, PathBuf};
 
 const FILES_DIR: &str = r#"C:\Users\Rafael\Downloads"#;
 const UPLOAD_SIZE_LIMIT_MIB: u64 = 256;
@@ -20,8 +21,8 @@ struct DirContent {
     url: String,
     file_name: String,
     svg_icon: &'static str,
-    size: u64,
-    time: u64,
+    date: String,
+    size: String,
 }
 
 #[derive(Serialize)]
@@ -37,7 +38,24 @@ struct TemplateContext {
 }
 
 async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
-    use std::os::windows::fs::MetadataExt;
+    fn stringify_file_size(file_size: u64) -> String {
+        if file_size == 0 {
+            return "".to_owned();
+        }
+
+        let (converted, prefix) = match file_size {
+            1024..=1048575 => (file_size as f64 / 1024.0, "kiB"),
+            1048576..=1073741823 => (file_size as f64 / 1048576.0, "MiB"),
+            1073741824..=1099511627776 => (file_size as f64 / 1073741824.0, "GiB"),
+            _ => (file_size as f64, "B"),
+        };
+
+        if file_size < 1024 {
+            format!("{} {}", file_size, prefix)
+        } else {
+            format!("{:.2} {}", converted, prefix)
+        }
+    }
 
     let mut directories = vec![];
     let mut files = vec![];
@@ -50,19 +68,22 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
         let metadata = entry.metadata().await?;
         let mut url = http::RawStr::new(&file_name).percent_encode().to_string();
 
-        let (vec, icon) = if metadata.is_dir() {
+        let (vec, svg_icon) = if metadata.is_dir() {
             url.push('/');
             (&mut directories, "folder")
         } else {
             (&mut files, "file")
         };
 
+        let (file_size, modified) = windows::get_metadata(metadata);
+        let date = windows::get_date(modified).ok_or(std::io::Error::last_os_error())?;
+
         vec.push(DirContent {
             url,
             file_name,
-            svg_icon: icon,
-            size: metadata.file_size(),
-            time: metadata.last_write_time(),
+            svg_icon,
+            date,
+            size: stringify_file_size(file_size),
         })
     }
     directories.append(&mut files);
@@ -87,7 +108,7 @@ async fn page_indexer(url_path: PathBuf) -> Option<Template> {
         }
         tmp.reverse();
         tmp
-    }; 
+    };
 
     let context = TemplateContext {
         breadcrumbs,

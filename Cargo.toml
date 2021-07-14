@@ -10,3 +10,4 @@ rocket = "0.5.0-rc.1"
 rocket_dyn_templates = { version = "0.1.0-rc.1", features = ["handlebars"] }
 multer = { version = "2.0", features = ["tokio-io"] }
 serde = { version = "1.0", features = ["derive"] }
+winapi = { version = "0.3.9", features = ["timezoneapi"] }
