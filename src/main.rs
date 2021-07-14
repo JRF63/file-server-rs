@@ -1,23 +1,25 @@
 #[macro_use]
 extern crate rocket;
 
+mod config;
 mod upload;
 
 use std::path::{Path, PathBuf};
 
 use rocket::fs::{relative, FileServer, NamedFile};
 use rocket::http;
+use rocket::Request;
 use rocket_dyn_templates::Template;
 use serde::Serialize;
 
 const FILES_DIR: &str = r#"C:\Users\Rafael\Downloads"#;
-const UPLOAD_SIZE_LIMIT: u64 = 256;
+const UPLOAD_SIZE_LIMIT_MIB: u64 = 256;
 
 #[derive(Serialize)]
 struct DirContent {
     url: String,
     file_name: String,
-    svg_icon: String,
+    svg_icon: &'static str,
 }
 
 #[derive(Serialize)]
@@ -32,15 +34,25 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
     let mut files = vec![];
     let mut dir_reader = rocket::tokio::fs::read_dir(dir_path).await?;
     while let Some(entry) = dir_reader.next_entry().await? {
-        let file_name = entry.file_name().to_string_lossy().into_owned();
+        let file_name = entry
+            .file_name()
+            .into_string()
+            .or(Err(std::io::Error::last_os_error()))?;
         let metadata = entry.metadata().await?;
         let mut url = http::RawStr::new(&file_name).percent_encode().to_string();
-        if metadata.is_dir() {
+
+        let (vec, icon) = if metadata.is_dir() {
             url.push('/');
-            directories.push(DirContent { url, file_name, svg_icon: "folder".to_owned() });
+            (&mut directories, "folder")
         } else {
-            files.push(DirContent { url, file_name, svg_icon: "file".to_owned() });
-        }
+            (&mut files, "file")
+        };
+
+        vec.push(DirContent {
+            url,
+            file_name,
+            svg_icon: icon,
+        })
     }
     directories.append(&mut files);
     Ok(directories)
@@ -49,18 +61,12 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
 #[get("/<url_path..>", rank = 11)]
 async fn page_indexer(url_path: PathBuf) -> Option<Template> {
     let local_path = Path::new(FILES_DIR).join(&url_path);
-    match get_dir_contents(&local_path).await {
-        Ok(contents) => {
-            let context = TemplateContext {
-                url_path: url_path.to_string_lossy().into_owned().replace("\\", "/"),
-                contents,
-            };
-            Some(Template::render("main", &context))
-        }
-        Err(_) => {
-            None
-        }
-    }
+    let contents = get_dir_contents(&local_path).await.ok()?;
+    let context = TemplateContext {
+        url_path: url_path.to_string_lossy().into_owned().replace("\\", "/"),
+        contents,
+    };
+    Some(Template::render("main", &context))
 }
 
 #[get("/favicon.png")]
@@ -69,10 +75,17 @@ async fn favicon() -> Option<NamedFile> {
     NamedFile::open(path).await.ok()
 }
 
+#[catch(default)]
+fn default_catcher(status: http::Status, req: &Request) -> String {
+    format!("{} ({})", status, req.uri())
+}
+
 #[launch]
 fn rocket() -> _ {
-    rocket::build()
+    let config = config::rocket_config();
+    rocket::custom(config)
         .mount("/", routes![favicon, page_indexer, upload::upload_handler])
         .mount("/", FileServer::from(FILES_DIR))
+        .register("/", catchers![default_catcher])
         .attach(Template::fairing())
 }

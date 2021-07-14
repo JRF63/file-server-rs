@@ -9,7 +9,7 @@ use multer::{Constraints, Multipart, SizeLimit};
 use std::path::{Path, PathBuf};
 
 use super::FILES_DIR;
-use super::UPLOAD_SIZE_LIMIT;
+use super::UPLOAD_SIZE_LIMIT_MIB;
 
 pub struct Reload;
 
@@ -70,26 +70,27 @@ pub async fn upload_handler(
     }
 
     if content_type.is_form_data() {
-        let stream = files.open(UPLOAD_SIZE_LIMIT.mebibytes());
+        let stream = files.open(UPLOAD_SIZE_LIMIT_MIB.mebibytes());
         let content_type = content_type.to_string();
         let (_, boundary) = content_type.split_at(30);
         let constraints = Constraints::new()
             .allowed_fields(vec!["files"])
-            .size_limit(SizeLimit::new().whole_stream(UPLOAD_SIZE_LIMIT * 1024 * 1024));
+            .size_limit(SizeLimit::new().whole_stream(UPLOAD_SIZE_LIMIT_MIB * 1024 * 1024));
         let mut multipart = Multipart::with_reader_with_constraints(stream, boundary, constraints);
 
         while let Some(mut field) = multipart.next_field().await? {
             let file_name = sanitize_file_name(field.file_name()).ok_or(HttpStatus::BadRequest)?;
             let path = Path::new(FILES_DIR).join(&url_path).join(&file_name);
+            
             if path.exists() {
                 return Err(HttpStatus::Forbidden);
+            } else {
+                let mut file = rocket::tokio::fs::File::create(path).await?;
+                while let Some(mut chunk) = field.chunk().await? {
+                    while file.write_buf(&mut chunk).await? != 0 {}
+                }
+                file.sync_all().await?;
             }
-
-            let mut file = rocket::tokio::fs::File::create(path).await?;
-            while let Some(chunk) = field.chunk().await? {
-                file.write_all(&chunk).await?;
-            }
-            file.sync_all().await?;
         }
         Ok(Reload)
     } else {
