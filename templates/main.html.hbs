@@ -25,6 +25,19 @@
         }
         .Breadcrumbs {
             flex: 1;
+            display: flex;
+            align-items: center;
+            overflow-x: auto;
+            scrollbar-width: none;
+            justify-content: left;
+        }
+        .Breadcrumb {
+            margin: 0.3rem;
+        }
+        .CrumbCaret {
+            flex: none;
+            width: 0.8rem;
+            height: 0.8rem;
         }
         .UploadLabel {
             cursor: pointer;
@@ -35,13 +48,11 @@
         .DirWrap {
             display: flex;
             flex-direction: column;
-            width: 100%;
         }
         .ListItem {
             display: flex;
             align-items: center;
             overflow: hidden;
-            width: 100%;
             height: 2rem;
             padding: 1rem;
         }
@@ -72,6 +83,9 @@
             <symbol id="cloud" fill="#cccccc" viewBox="0 0 16 16">
                 <path d="M8 2a5.53 5.53 0 0 0-3.594 1.342c-.766.66-1.321 1.52-1.464 2.383C1.266 6.095 0 7.555 0 9.318 0 11.366 1.708 13 3.781 13h8.906C14.502 13 16 11.57 16 9.773c0-1.636-1.242-2.969-2.834-3.194C12.923 3.999 10.69 2 8 2zm2.354 5.146a.5.5 0 0 1-.708.708L8.5 6.707V10.5a.5.5 0 0 1-1 0V6.707L6.354 7.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2z"/>
             </symbol>
+            <symbol id="caret" fill="#cccccc" viewBox="0 0 16 16">
+                <path d="m12.14 8.753-5.482 4.796c-.646.566-1.658.106-1.658-.753V3.204a1 1 0 0 1 1.659-.753l5.48 4.796a1 1 0 0 1 0 1.506z"/>
+            </symbol>
         </defs>
     </svg>
 
@@ -81,7 +95,7 @@
                 <use xlink:href="#home"></use>
             </svg>
         </a>
-        <div class="Breadcrumbs">/{{ url_path }}</div>
+        <div class="Breadcrumbs"></div>
         <form method="POST" enctype="multipart/form-data">
             <label class="UploadLabel">
                 <svg class="Svg UploadSvg">
@@ -93,12 +107,7 @@
     </div>
     
     <div class="DirWrap">
-        <a href="../" class="ListItem">
-            <svg class="Svg">
-                <use xlink:href="#folder"></use>
-            </svg>
-            <div>..</div>
-        </a>{{#each contents}}
+        {{#each contents}}
         <a href="{{this.url}}" class="ListItem">
             <svg class="Svg">
                 <use xlink:href="#{{this.svg_icon}}"></use>
@@ -108,4 +117,51 @@
         {{~/each}}
     </div>
 </body>
+<script>
+
+document.body.onload = addBreadcrumbs;
+
+function createCrumb(segment, link) {
+    const crumb = document.createElement("a");
+    const newContent = document.createTextNode(decodeURIComponent(segment));
+    crumb.appendChild(newContent);
+    crumb.className = "Breadcrumb";
+    return crumb;
+}
+
+function createCaret() {
+    const svgns = "http://www.w3.org/2000/svg";
+    const caret = document.createElementNS(svgns, "svg");
+    const use = document.createElementNS(svgns, "use");
+    use.setAttribute("href", "#caret");
+    caret.appendChild(use);
+    caret.className.baseVal = "CrumbCaret";
+    return caret;
+}
+
+function addBreadcrumbs() {
+    const path = document.location.pathname;
+    const segments = path.split("/");
+
+    const container = document.getElementsByClassName("Breadcrumbs")[0];
+    for (var i = 0; i < segments.length; i++) {
+        if (segments[i] == "") {
+            continue;
+        }
+        container.appendChild(createCaret());
+        container.appendChild(createCrumb(segments[i]));
+    }
+
+    const breadcrumbs = container.children;
+    var link = "../";
+    for (var i = breadcrumbs.length - 3; i >= 0; i--) {
+        const child = breadcrumbs[i];
+        if (child.tagName == "A") {
+            child.setAttribute("href", link);
+            link += "../";
+        }
+    }
+    container.scrollLeft = container.scrollWidth;
+}
+</script>
 </html>
