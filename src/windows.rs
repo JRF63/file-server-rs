@@ -4,7 +4,7 @@ use winapi::um::timezoneapi::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalT
 use std::mem::MaybeUninit;
 use std::os::windows::fs::MetadataExt;
 
-pub fn get_metadata(metadata: std::fs::Metadata) -> (u64, u64) {
+pub fn get_metadata(metadata: &std::fs::Metadata) -> (u64, u64) {
     (metadata.file_size(), metadata.last_write_time())
 }
 
@@ -38,25 +38,24 @@ fn system_time_to_string(system_time: SYSTEMTIME) -> String {
         }
     };
     format!(
-        "{:02}-{}-{} {}:{} {}",
+        "{:02}-{}-{} {}:{:02} {}",
         system_time.wDay, month, system_time.wYear, hour, system_time.wMinute, suffix
     )
 }
 
-pub fn get_date(file_time: u64) -> Option<String> {
+pub fn get_date(file_time: u64) -> std::io::Result<String> {
     let mut utc = MaybeUninit::uninit();
     let mut local = MaybeUninit::uninit();
 
     let local_time = unsafe {
-        if FileTimeToSystemTime((&file_time as *const u64).cast(), utc.as_mut_ptr()) == 0 {
-            return None;
-        }
-        if SystemTimeToTzSpecificLocalTime(std::ptr::null(), utc.as_ptr(), local.as_mut_ptr()) == 0
+        if FileTimeToSystemTime((&file_time as *const u64).cast(), utc.as_mut_ptr()) == 0
+            || SystemTimeToTzSpecificLocalTime(std::ptr::null(), utc.as_ptr(), local.as_mut_ptr())
+                == 0
         {
-            return None;
+            return Err(std::io::Error::last_os_error());
         }
         local.assume_init()
     };
 
-    Some(system_time_to_string(local_time))
+    Ok(system_time_to_string(local_time))
 }

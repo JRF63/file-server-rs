@@ -5,12 +5,13 @@ mod config;
 mod upload;
 mod windows;
 
-use rocket::fs::{relative, FileServer, NamedFile};
+use rocket::fs::{relative, NamedFile};
 use rocket::http;
+use rocket::shield::{ExpectCt, NoSniff, Prefetch, Referrer, Shield, XssFilter};
+use rocket::Either;
 use rocket::Request;
 use rocket_dyn_templates::Template;
 use serde::Serialize;
-
 use std::path::{Path, PathBuf};
 
 const FILES_DIR: &str = r#"C:\Users\Rafael\Downloads"#;
@@ -37,7 +38,7 @@ struct TemplateContext {
     contents: Vec<DirContent>,
 }
 
-async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
+async fn dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
     fn stringify_file_size(file_size: u64) -> String {
         if file_size == 0 {
             return "".to_owned();
@@ -61,12 +62,12 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
     let mut files = vec![];
     let mut dir_reader = rocket::tokio::fs::read_dir(dir_path).await?;
     while let Some(entry) = dir_reader.next_entry().await? {
-        let file_name = entry
-            .file_name()
-            .into_string()
-            .or(Err(std::io::Error::last_os_error()))?;
-        let metadata = entry.metadata().await?;
+        let file_name = entry.file_name().to_string_lossy().into_owned();
         let mut url = http::RawStr::new(&file_name).percent_encode().to_string();
+
+        let metadata = entry.metadata().await?;
+        let (file_size, modified) = windows::get_metadata(&metadata);
+        let date = windows::get_date(modified)?;
 
         let (vec, svg_icon) = if metadata.is_dir() {
             url.push('/');
@@ -74,9 +75,6 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
         } else {
             (&mut files, "file")
         };
-
-        let (file_size, modified) = windows::get_metadata(metadata);
-        let date = windows::get_date(modified).ok_or(std::io::Error::last_os_error())?;
 
         vec.push(DirContent {
             url,
@@ -90,16 +88,12 @@ async fn get_dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>
     Ok(directories)
 }
 
-#[get("/<url_path..>", rank = 11)]
-async fn page_indexer(url_path: PathBuf) -> Option<Template> {
-    let local_path = Path::new(FILES_DIR).join(&url_path);
-    let contents = get_dir_contents(&local_path).await.ok()?;
-
+fn render_directory(path: &PathBuf, contents: Vec<DirContent>) -> Template {
     let breadcrumbs = {
         let mut tmp = Vec::new();
         let mut url = String::new();
-        for component in url_path.components().rev() {
-            let segment = component.as_os_str().to_str()?.to_owned();
+        for component in path.components().rev() {
+            let segment = component.as_os_str().to_string_lossy().into_owned();
             tmp.push(Breadcrumb {
                 url: url.clone(),
                 segment,
@@ -114,7 +108,16 @@ async fn page_indexer(url_path: PathBuf) -> Option<Template> {
         breadcrumbs,
         contents,
     };
-    Some(Template::render("main", &context))
+    Template::render("main", &context)
+}
+
+#[get("/<path..>")]
+async fn page_indexer(path: PathBuf) -> Either<Template, Option<NamedFile>> {
+    let local_path = Path::new(FILES_DIR).join(&path);
+    match dir_contents(&local_path).await {
+        Ok(contents) => Either::Left(render_directory(&path, contents)),
+        Err(_) => Either::Right(NamedFile::open(&local_path).await.ok()),
+    }
 }
 
 #[get("/favicon.png")]
@@ -130,10 +133,17 @@ fn default_catcher(status: http::Status, req: &Request) -> String {
 
 #[launch]
 fn rocket() -> _ {
+    let shield = Shield::default()
+        .enable(Referrer::NoReferrer)
+        .enable(XssFilter::default())
+        .enable(NoSniff::Enable)
+        .enable(ExpectCt::default())
+        .enable(Prefetch::Off);
+
     let config = config::rocket_config();
     rocket::custom(config)
         .mount("/", routes![favicon, page_indexer, upload::upload_handler])
-        .mount("/", FileServer::from(FILES_DIR))
         .register("/", catchers![default_catcher])
         .attach(Template::fairing())
+        .attach(shield)
 }
