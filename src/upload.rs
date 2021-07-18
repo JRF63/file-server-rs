@@ -1,15 +1,10 @@
+use multer::Multipart;
 use rocket::data::{Data, ToByteUnit};
 use rocket::http::{self, ContentType};
 use rocket::request::Request;
 use rocket::response::{self, Responder, Response};
 use rocket::tokio::io::AsyncWriteExt;
-
-use multer::{Constraints, Multipart, SizeLimit};
-
 use std::path::{Path, PathBuf};
-
-use super::FILES_DIR;
-use super::UPLOAD_SIZE_LIMIT_MIB;
 
 pub struct Reload;
 
@@ -56,32 +51,26 @@ pub async fn upload_handler(
     files: Data<'_>,
 ) -> Result<Reload, HttpStatus> {
     fn sanitize_file_name(file_name: Option<&str>) -> Option<String> {
-        match file_name {
-            Some(file_name) => {
-                let extension = Path::new(file_name).extension()?.to_str()?;
-                let base_name = rocket::fs::FileName::new(file_name).as_str()?;
-                let mut sanitized = base_name.to_owned();
-                sanitized.push('.');
-                sanitized.push_str(extension);
-                Some(sanitized)
-            }
-            None => None,
-        }
+        file_name.and_then(|file_name| {
+            let extension = Path::new(file_name).extension()?.to_str()?;
+            let base_name = rocket::fs::FileName::new(file_name).as_str()?;
+            let mut sanitized = base_name.to_owned();
+            sanitized.push('.');
+            sanitized.push_str(extension);
+            Some(sanitized)
+        })
     }
 
     if content_type.is_form_data() {
-        let stream = files.open(UPLOAD_SIZE_LIMIT_MIB.mebibytes());
+        let stream = files.open(crate::UPLOAD_SIZE_LIMIT_MIB.mebibytes());
         let content_type = content_type.to_string();
         let (_, boundary) = content_type.split_at(30);
-        let constraints = Constraints::new()
-            .allowed_fields(vec!["files"])
-            .size_limit(SizeLimit::new().whole_stream(UPLOAD_SIZE_LIMIT_MIB * 1024 * 1024));
-        let mut multipart = Multipart::with_reader_with_constraints(stream, boundary, constraints);
+        let mut multipart = Multipart::with_reader(stream, boundary);
 
         while let Some(mut field) = multipart.next_field().await? {
             let file_name = sanitize_file_name(field.file_name()).ok_or(HttpStatus::BadRequest)?;
-            let path = Path::new(FILES_DIR).join(&url_path).join(&file_name);
-            
+            let path = Path::new(crate::FILES_DIR).join(&url_path).join(&file_name);
+
             if path.exists() {
                 return Err(HttpStatus::Forbidden);
             } else {
