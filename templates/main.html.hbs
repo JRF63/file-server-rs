@@ -9,7 +9,7 @@
         body {
             background-color: hsl(0, 0%, 10%);
             color: hsl(0, 0%, 90%);
-            font-family: "Roboto";
+            font-family: "Consolas, 'Courier New', monospace";
         }
         a {
             color: currentColor;
@@ -121,7 +121,7 @@
             <svg class="CrumbCaret">
                 <use href="#caret"></use>
             </svg>
-            <a class="Breadcrumb" href="{{this.url}}">{{this.segment}}</a>
+            <a class="Breadcrumb" {{#if this.url}}href="{{this.url}}"{{/if}}>{{this.segment}}</a>
             {{~/each}}
         </div>
         <form method="POST" enctype="multipart/form-data">
