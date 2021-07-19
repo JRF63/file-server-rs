@@ -1,5 +1,6 @@
 use multer::Multipart;
 use rocket::data::{Data, ToByteUnit};
+use rocket::http::hyper::header::LOCATION;
 use rocket::http::{self, ContentType};
 use rocket::request::Request;
 use rocket::response::{self, Responder, Response};
@@ -10,10 +11,13 @@ pub struct Reload;
 
 impl<'r> Responder<'r, 'r> for Reload {
     fn respond_to(self, request: &'r Request<'_>) -> response::Result<'r> {
-        let mut response = Response::build();
-        response.status(http::Status::SeeOther);
-        response.header(http::Header::new("Location", request.uri().path().as_str()));
-        response.ok()
+        Response::build()
+            .status(http::Status::SeeOther)
+            .header(http::Header::new(
+                LOCATION.as_str(),
+                request.uri().path().as_str(),
+            ))
+            .ok()
     }
 }
 
