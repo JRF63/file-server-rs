@@ -13,7 +13,6 @@ impl<'r> Responder<'r, 'r> for Reload {
         let mut response = Response::build();
         response.status(http::Status::SeeOther);
         response.header(http::Header::new("Location", request.uri().path().as_str()));
-        response.header(http::Header::new("Cache-Control", "no-store"));
         response.ok()
     }
 }
