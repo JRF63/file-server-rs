@@ -1,11 +1,15 @@
 use rocket::fs::NamedFile;
-use rocket::http;
-use rocket::http::hyper::header::CACHE_CONTROL;
+use rocket::http::{
+    self,
+    hyper::{header::CACHE_CONTROL, HeaderName},
+};
 use rocket::request::Request;
 use rocket::response::{self, Responder};
 use rocket_dyn_templates::Template;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+
+const CUSTOM_HEADERS: [(HeaderName, &str); 1] = [(CACHE_CONTROL, "no-store")];
 
 #[derive(Serialize)]
 struct DirContent {
@@ -28,43 +32,34 @@ struct TemplateContext {
     contents: Vec<DirContent>,
 }
 
-pub enum ResponseWrapper {
-    Directory(Template),
-    File(NamedFile),
-}
-
-pub struct PageIndex(ResponseWrapper);
-
-impl<'r> Responder<'r, 'static> for PageIndex {
-    fn respond_to(self, request: &'r Request<'_>) -> response::Result<'static> {
-        let result = match self.0 {
-            ResponseWrapper::Directory(template) => template.respond_to(request),
-            ResponseWrapper::File(named_file) => named_file.respond_to(request),
-        };
-        result.and_then(|mut response| {
-            response.set_raw_header(CACHE_CONTROL.as_str(), "no-store");
-            Ok(response)
-        })
-    }
-}
-
 async fn dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
     fn stringify_file_size(file_size: u64) -> String {
-        if file_size == 0 {
-            return "".to_owned();
+        macro_rules! ldexp {
+            ($fp:expr, $exp:literal) => {
+                $fp * f64::from_bits(((0x3ff + $exp) as u64) << 52)
+            };
         }
 
-        let (converted, prefix) = match file_size {
-            1024..=1048575 => (file_size as f64 / 1024.0, "kiB"),
-            1048576..=1073741823 => (file_size as f64 / 1048576.0, "MiB"),
-            1073741824..=1099511627776 => (file_size as f64 / 1073741824.0, "GiB"),
-            _ => (file_size as f64, "B"),
-        };
-
-        if file_size < 1024 {
-            format!("{} {}", file_size, prefix)
-        } else {
-            format!("{:.2} {}", converted, prefix)
+        const U32_MAX: u64 = u32::MAX as u64;
+        
+        match file_size {
+            0..=U32_MAX => {
+                const KIB: u32 = 1 << 10;
+                const MIB: u32 = 1 << 20;
+                const MIB_M_1: u32 = MIB - 1;
+                const GIB: u32 = 1 << 30;
+                const GIB_M_1: u32 = GIB - 1;
+                
+                let file_size = file_size as u32;
+                match file_size {
+                    0 => "".to_owned(),
+                    KIB..=MIB_M_1 => format!("{:.2} kiB", ldexp!(file_size as f64, -10)),
+                    MIB..=GIB_M_1 => format!("{:.2} MiB", ldexp!(file_size as f64, -20)),
+                    GIB..=u32::MAX => format!("{:.2} GiB", ldexp!(file_size as f64, -30)),
+                    _ => format!("{} B", file_size),
+                }
+            }
+            file_size => format!("{:.2} GiB", ldexp!(file_size as f64, -30)),
         }
     }
 
@@ -121,17 +116,41 @@ fn render_directory(path: &PathBuf, contents: Vec<DirContent>) -> Template {
     Template::render("main", &context)
 }
 
+pub enum IndexResponder {
+    Directory(Template),
+    File(NamedFile),
+}
+
+pub struct PageIndex(IndexResponder);
+
+impl<'r> Responder<'r, 'static> for PageIndex {
+    fn respond_to(self, request: &'r Request<'_>) -> response::Result<'static> {
+        let result = match self.0 {
+            IndexResponder::Directory(template) => template.respond_to(request),
+            IndexResponder::File(named_file) => named_file.respond_to(request),
+        };
+        result.and_then(|mut response| {
+            for (header, value) in &CUSTOM_HEADERS {
+                response.set_raw_header(header.as_str(), *value);
+            }
+            Ok(response)
+        })
+    }
+}
+
 #[get("/<path..>", rank = 0)]
-pub async fn page_indexer(path: PathBuf) -> std::io::Result<PageIndex> {
+pub async fn page_indexer(path: PathBuf) -> std::io::Result<Option<PageIndex>> {
     let local_path = Path::new(crate::FILES_DIR).join(&path);
-    let metadata = rocket::tokio::fs::metadata(&local_path).await?;
-    let response = if metadata.is_dir() {
-        let contents = dir_contents(&local_path).await?;
-        ResponseWrapper::Directory(render_directory(&path, contents))
-    } else if metadata.is_file() {
-        ResponseWrapper::File(NamedFile::open(&local_path).await?)
-    } else {
-        return Err(std::io::Error::last_os_error());
-    };
-    Ok(PageIndex(response))
+    match dir_contents(&local_path).await {
+        Ok(contents) => Ok(Some(PageIndex(IndexResponder::Directory(
+            render_directory(&path, contents),
+        )))),
+        Err(e) => match e.kind() {
+            std::io::ErrorKind::Other => Ok(Some(PageIndex(IndexResponder::File(
+                NamedFile::open(&local_path).await?,
+            )))),
+            std::io::ErrorKind::NotFound => Ok(None),
+            _ => Err(e),
+        },
+    }
 }
