@@ -145,12 +145,10 @@ pub async fn page_indexer(path: PathBuf) -> std::io::Result<Option<PageIndex>> {
         Ok(contents) => Ok(Some(PageIndex(IndexResponder::Directory(
             render_directory(&path, contents),
         )))),
-        Err(e) => match e.kind() {
-            std::io::ErrorKind::Other => Ok(Some(PageIndex(IndexResponder::File(
+        Err(_) => {
+            Ok(Some(PageIndex(IndexResponder::File(
                 NamedFile::open(&local_path).await?,
-            )))),
-            std::io::ErrorKind::NotFound => Ok(None),
-            _ => Err(e),
+            ))))
         },
     }
 }
