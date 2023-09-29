@@ -62,8 +62,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state_ref.clone())
             .service(statics::favicon)
             .service(statics::css)
-            .service(index::root)
-            .service(index::index)
+            .default_service(web::to(index::index))
     })
     .bind(args.addr)?
     .run()

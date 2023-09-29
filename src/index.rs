@@ -1,6 +1,8 @@
 use crate::AppState;
 use actix_files::NamedFile;
-use actix_web::{get, http::header::http_percent_encode, web, Either, HttpResponse, Responder};
+use actix_web::{
+    http::header::http_percent_encode, web, Either, HttpRequest, HttpResponse, Responder,
+};
 use serde::Serialize;
 use std::{
     fmt,
@@ -28,14 +30,15 @@ struct TemplateContext {
     contents: Vec<DirContent>,
 }
 
-#[get("/")]
-pub async fn root(data: web::Data<AppState<'_>>) -> impl Responder {
-    handle_listing_files(data, "".to_owned()).await
-}
+pub async fn index(data: web::Data<AppState<'_>>, req: HttpRequest) -> impl Responder {
+    // Forward slashes causes Windows to assume it's an absolute path to C:\
+    let no_starting_slash = req.path().trim_start_matches('/');
 
-#[get("/{path}")]
-pub async fn index(data: web::Data<AppState<'_>>, web_path: web::Path<String>) -> impl Responder {
-    handle_listing_files(data, web_path.into_inner()).await
+    let path = percent_encoding::percent_decode(no_starting_slash.as_bytes())
+        .decode_utf8_lossy()
+        .to_string();
+
+    handle_listing_files(data, path).await
 }
 
 async fn handle_listing_files(

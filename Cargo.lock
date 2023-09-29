@@ -546,6 +546,7 @@ dependencies = [
  "actix-web",
  "clap",
  "handlebars",
+ "percent-encoding",
  "serde",
  "tokio",
  "windows",
