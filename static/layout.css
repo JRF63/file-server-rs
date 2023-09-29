@@ -1,0 +1,81 @@
+body {
+  background-color: hsl(0, 0%, 10%);
+  color: hsl(0, 0%, 90%);
+  font-family: "Consolas, 'Courier New', monospace";
+}
+a {
+  color: currentColor;
+  text-decoration: none;
+}
+.Header {
+  display: flex;
+  align-items: center;
+  justify-content: left;
+  padding: 1rem;
+  background-color: hsl(0, 0%, 8%);
+}
+.Breadcrumbs {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  justify-content: left;
+}
+.Breadcrumb {
+  white-space: nowrap;
+  margin: 0.3rem;
+}
+.CrumbCaret {
+  flex: none;
+  width: 0.8rem;
+  height: 0.8rem;
+}
+.UploadLabel {
+  cursor: pointer;
+}
+.NoDisplay {
+  display: none;
+}
+.DirWrap {
+  display: flex;
+  flex-direction: column;
+}
+.ListItem {
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1rem;
+}
+.ItemInfo {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  justify-content: center;
+  height: 3rem;
+}
+.FileName {
+  overflow: hidden;
+  text-overflow: ellipsis ellipsis;
+  white-space: nowrap;
+  padding: 0.25rem 0;
+}
+.Metadata {
+  display: flex;
+  font-size: x-small;
+  padding: 0.25rem 0;
+  color: hsl(0, 0%, 60%);
+}
+.FileSize {
+  margin-left: auto;
+}
+.Svg {
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding-right: 0.5rem;
+}
+.UploadSvg {
+  padding-right: 0;
+  padding-left: 0.5rem;
+}

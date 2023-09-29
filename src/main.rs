@@ -1,45 +1,71 @@
-#[macro_use]
-extern crate rocket;
-
-mod config;
-mod indexer;
+mod index;
 mod statics;
-mod upload;
+#[cfg(target_os = "windows")]
 mod windows;
 
-use rocket::http;
-use rocket::shield::{ExpectCt, NoSniff, Prefetch, Referrer, Shield, XssFilter};
-use rocket::Request;
-use rocket_dyn_templates::Template;
+use actix_web::{web, App, HttpServer};
+use clap::Parser;
+use handlebars::Handlebars;
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::PathBuf,
+};
 
-const FILES_DIR: &str = r#"C:\Users\Rafael\Downloads"#;
-const UPLOAD_SIZE_LIMIT_MIB: u64 = 256;
+const HANDLEBARS_EXT: &str = ".html.hbs";
+const HANDLEBARS_TEMPLATE_FOLDER: &str = "./templates";
 
-#[catch(default)]
-fn default_catcher(status: http::Status, req: &Request) -> String {
-    format!("{} ({})", status, req.uri())
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Root directory of the files to serve
+    #[arg(short, long)]
+    root: String,
+
+    /// Desired IP address of the server
+    #[arg(short, long, default_value_t = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080))]
+    addr: SocketAddr,
 }
 
-#[launch]
-fn rocket() -> _ {
-    let shield = Shield::default()
-        .enable(Referrer::NoReferrer)
-        .enable(XssFilter::default())
-        .enable(NoSniff::Enable)
-        .enable(ExpectCt::default())
-        .enable(Prefetch::Off);
+pub struct AppState<'reg> {
+    serve_from: PathBuf,
+    handlebars: Handlebars<'reg>,
+}
 
-    let config = config::rocket_config();
-    rocket::custom(config)
-        .mount(
-            "/",
-            routes![
-                statics::favicon,
-                indexer::page_indexer,
-                upload::upload_handler
-            ],
-        )
-        .register("/", catchers![default_catcher])
-        .attach(Template::fairing())
-        .attach(shield)
+impl<'reg> AppState<'reg> {
+    fn new(serve_from: &str) -> Self {
+        let serve_from = PathBuf::from(serve_from);
+        if !serve_from.is_dir() {
+            panic!("Root needs to be a directory");
+        }
+
+        let mut handlebars = Handlebars::new();
+        handlebars
+            .register_templates_directory(HANDLEBARS_EXT, HANDLEBARS_TEMPLATE_FOLDER)
+            .expect("Error registering Handlebars templates");
+
+        Self {
+            serve_from,
+            handlebars,
+        }
+    }
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    let args = Args::parse();
+
+    let app_state = AppState::new(&args.root);
+    let app_state_ref = web::Data::new(app_state);
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(app_state_ref.clone())
+            .service(statics::favicon)
+            .service(statics::css)
+            .service(index::root)
+            .service(index::index)
+    })
+    .bind(args.addr)?
+    .run()
+    .await
 }

@@ -1,5 +1,7 @@
-use winapi::um::minwinbase::SYSTEMTIME;
-use winapi::um::timezoneapi::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime};
+use windows::Win32::{
+    Foundation::SYSTEMTIME,
+    System::Time::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime},
+};
 
 use std::mem::MaybeUninit;
 use std::os::windows::fs::MetadataExt;
@@ -44,18 +46,17 @@ fn system_time_to_string(system_time: SYSTEMTIME) -> String {
 }
 
 pub fn get_date(file_time: u64) -> std::io::Result<String> {
-    let mut utc = MaybeUninit::uninit();
-    let mut local = MaybeUninit::uninit();
-
-    let local_time = unsafe {
-        if FileTimeToSystemTime((&file_time as *const u64).cast(), utc.as_mut_ptr()) == 0
-            || SystemTimeToTzSpecificLocalTime(std::ptr::null(), utc.as_ptr(), local.as_mut_ptr())
-                == 0
-        {
-            return Err(std::io::Error::last_os_error());
+    let local_time = || -> windows::core::Result<SYSTEMTIME> {
+        let mut utc = MaybeUninit::uninit();
+        let mut local = MaybeUninit::uninit();
+        unsafe {
+            FileTimeToSystemTime((&file_time as *const u64).cast(), utc.as_mut_ptr())?;
+            SystemTimeToTzSpecificLocalTime(None, utc.as_ptr(), local.as_mut_ptr())?;
+            Ok(local.assume_init())
         }
-        local.assume_init()
     };
 
-    Ok(system_time_to_string(local_time))
+    Ok(system_time_to_string(
+        local_time().map_err(|_| std::io::Error::last_os_error())?,
+    ))
 }

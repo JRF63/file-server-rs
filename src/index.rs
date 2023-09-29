@@ -1,15 +1,11 @@
-use rocket::fs::NamedFile;
-use rocket::http::{
-    self,
-    hyper::{header::CACHE_CONTROL, HeaderName},
-};
-use rocket::request::Request;
-use rocket::response::{self, Responder};
-use rocket_dyn_templates::Template;
+use crate::AppState;
+use actix_files::NamedFile;
+use actix_web::{get, http::header::http_percent_encode, web, Either, HttpResponse, Responder};
 use serde::Serialize;
-use std::path::{Path, PathBuf};
-
-const CUSTOM_HEADERS: [(HeaderName, &str); 1] = [(CACHE_CONTROL, "no-store")];
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
 
 #[derive(Serialize)]
 struct DirContent {
@@ -32,7 +28,63 @@ struct TemplateContext {
     contents: Vec<DirContent>,
 }
 
+#[get("/")]
+pub async fn root(data: web::Data<AppState<'_>>) -> impl Responder {
+    handle_listing_files(data, "".to_owned()).await
+}
+
+#[get("/{path}")]
+pub async fn index(data: web::Data<AppState<'_>>, web_path: web::Path<String>) -> impl Responder {
+    handle_listing_files(data, web_path.into_inner()).await
+}
+
+async fn handle_listing_files(
+    data: web::Data<AppState<'_>>,
+    web_path: String,
+) -> Either<HttpResponse, std::io::Result<NamedFile>> {
+    // Path on the server
+    let local_path = data.serve_from.join(&web_path);
+
+    match dir_contents(&local_path).await {
+        Ok(contents) => {
+            let breadcrumbs = {
+                let mut tmp = Vec::new();
+                let mut url = String::new();
+                for component in Path::new(&web_path).components().rev() {
+                    let segment = component.as_os_str().to_string_lossy().into_owned();
+                    tmp.push(Breadcrumb {
+                        url: url.clone(),
+                        segment,
+                    });
+                    url.push_str("../");
+                }
+                tmp.reverse();
+                tmp
+            };
+            let context = TemplateContext {
+                breadcrumbs,
+                contents,
+            };
+            let body = data
+                .handlebars
+                .render("main", &context)
+                .expect("Handlebars failed at rendering");
+            Either::Left(HttpResponse::Ok().body(body))
+        }
+        Err(_) => Either::Right(NamedFile::open_async(local_path).await),
+    }
+}
+
 async fn dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
+    // Helper struct for percent encoding a string
+    struct PercentEncodedStr<'a>(&'a str);
+
+    impl<'a> fmt::Display for PercentEncodedStr<'a> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            http_percent_encode(f, self.0.as_bytes())
+        }
+    }
+
     fn stringify_file_size(file_size: u64) -> String {
         macro_rules! ldexp {
             ($fp:expr, $exp:literal) => {
@@ -41,7 +93,7 @@ async fn dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
         }
 
         const U32_MAX: u64 = u32::MAX as u64;
-        
+
         match file_size {
             0..=U32_MAX => {
                 const KIB: u32 = 1 << 10;
@@ -49,7 +101,7 @@ async fn dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
                 const MIB_M_1: u32 = MIB - 1;
                 const GIB: u32 = 1 << 30;
                 const GIB_M_1: u32 = GIB - 1;
-                
+
                 let file_size = file_size as u32;
                 match file_size {
                     0 => "".to_owned(),
@@ -65,13 +117,17 @@ async fn dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
 
     let mut directories = vec![];
     let mut files = vec![];
-    let mut dir_reader = rocket::tokio::fs::read_dir(dir_path).await?;
+    let mut dir_reader = tokio::fs::read_dir(dir_path).await?;
     while let Some(entry) = dir_reader.next_entry().await? {
         let file_name = entry.file_name().to_string_lossy().into_owned();
-        let mut url = http::RawStr::new(&file_name).percent_encode().to_string();
+        let mut url = format!("{}", PercentEncodedStr(&file_name));
 
         let metadata = entry.metadata().await?;
+
+        #[cfg(target_os = "windows")]
         let (file_size, modified) = crate::windows::get_metadata(&metadata);
+
+        #[cfg(target_os = "windows")]
         let date = crate::windows::get_date(modified)?;
 
         let (vec, svg_icon) = if metadata.is_dir() {
@@ -91,64 +147,4 @@ async fn dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
     }
     directories.append(&mut files);
     Ok(directories)
-}
-
-fn render_directory(path: &PathBuf, contents: Vec<DirContent>) -> Template {
-    let breadcrumbs = {
-        let mut tmp = Vec::new();
-        let mut url = String::new();
-        for component in path.components().rev() {
-            let segment = component.as_os_str().to_string_lossy().into_owned();
-            tmp.push(Breadcrumb {
-                url: url.clone(),
-                segment,
-            });
-            url.push_str("../");
-        }
-        tmp.reverse();
-        tmp
-    };
-
-    let context = TemplateContext {
-        breadcrumbs,
-        contents,
-    };
-    Template::render("main", &context)
-}
-
-pub enum IndexResponder {
-    Directory(Template),
-    File(NamedFile),
-}
-
-pub struct PageIndex(IndexResponder);
-
-impl<'r> Responder<'r, 'static> for PageIndex {
-    fn respond_to(self, request: &'r Request<'_>) -> response::Result<'static> {
-        let result = match self.0 {
-            IndexResponder::Directory(template) => template.respond_to(request),
-            IndexResponder::File(named_file) => named_file.respond_to(request),
-        };
-        result.and_then(|mut response| {
-            for (header, value) in &CUSTOM_HEADERS {
-                response.set_raw_header(header.as_str(), *value);
-            }
-            Ok(response)
-        })
-    }
-}
-
-#[get("/<path..>", rank = 0)]
-pub async fn page_indexer(path: PathBuf) -> std::io::Result<Option<PageIndex>> {
-    let local_path = Path::new(crate::FILES_DIR).join(&path);
-    match dir_contents(&local_path).await {
-        Ok(contents) => Ok(Some(PageIndex(IndexResponder::Directory(
-            render_directory(&path, contents),
-        )))),
-        Err(_) => {
-            Ok(Some(PageIndex(IndexResponder::File(
-                NamedFile::open(&local_path).await?,
-            ))))
-        },
-    }
 }
