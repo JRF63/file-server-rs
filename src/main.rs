@@ -1,9 +1,9 @@
 mod index;
-mod statics;
 #[cfg(target_os = "windows")]
 mod windows;
 
 use actix_web::{web, App, HttpServer};
+use actix_files::Files;
 use clap::Parser;
 use handlebars::Handlebars;
 use std::{
@@ -60,8 +60,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(app_state_ref.clone())
-            .service(statics::favicon)
-            .service(statics::css)
+            .service(Files::new("/static", "./static"))
             .default_service(web::to(index::index))
     })
     .bind(args.addr)?

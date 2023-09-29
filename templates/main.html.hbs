@@ -3,51 +3,28 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-    <link rel="icon" href="/favicon.png">
-    <link rel="stylesheet" href="/css/layout.css">
+    <link rel="icon" href="/static/favicon.png">
+    <link rel="stylesheet" href="/static/layout.css">
     <title>File server</title>
 </head>
 <body>
-    <svg xmlns="http://www.w3.org/2000/svg" display="none" width="0" height="0">
-        <defs>
-            <svg id="home" fill="#cccccc" viewBox="0 0 16 16">
-                <path d="M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5z"/>
-            </svg>
-            <svg id="folder" fill="#ccb100" viewBox="0 0 16 16">
-                <path d="M9.828 3h3.982a2 2 0 0 1 1.992 2.181l-.637 7A2 2 0 0 1 13.174 14H2.825a2 2 0 0 1-1.991-1.819l-.637-7a1.99 1.99 0 0 1 .342-1.31L.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3zm-8.322.12C1.72 3.042 1.95 3 2.19 3h5.396l-.707-.707A1 1 0 0 0 6.172 2H2.5a1 1 0 0 0-1 .981l.006.139z"/>
-            </svg>
-            <symbol id="file" fill="#cccccc" viewBox="0 0 16 16">
-                <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
-            </symbol>
-            <symbol id="cloud" fill="#cccccc" viewBox="0 0 16 16">
-                <path d="M8 2a5.53 5.53 0 0 0-3.594 1.342c-.766.66-1.321 1.52-1.464 2.383C1.266 6.095 0 7.555 0 9.318 0 11.366 1.708 13 3.781 13h8.906C14.502 13 16 11.57 16 9.773c0-1.636-1.242-2.969-2.834-3.194C12.923 3.999 10.69 2 8 2zm2.354 5.146a.5.5 0 0 1-.708.708L8.5 6.707V10.5a.5.5 0 0 1-1 0V6.707L6.354 7.854a.5.5 0 1 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2z"/>
-            </symbol>
-            <symbol id="caret" fill="#cccccc" viewBox="0 0 16 16">
-                <path d="m12.14 8.753-5.482 4.796c-.646.566-1.658.106-1.658-.753V3.204a1 1 0 0 1 1.659-.753l5.48 4.796a1 1 0 0 1 0 1.506z"/>
-            </symbol>
-        </defs>
-    </svg>
-
     <div class="Header">
         <a href="/">
-            <svg class="Svg">
-                <use href="#home"></use>
-            </svg>
+            <img src="/static/home.svg" class="Svg" />
         </a>
         <div class="Breadcrumbs">
             {{#each breadcrumbs}}
-            <svg class="CrumbCaret">
-                <use href="#caret"></use>
-            </svg>
+            <img src="/static/caret.svg" class="CrumbCaret" />
             <a class="Breadcrumb" {{#if this.url}}href="{{this.url}}"{{/if}}>{{this.segment}}</a>
             {{~/each}}
         </div>
         <form method="POST" enctype="multipart/form-data">
             <label class="UploadLabel">
-                <svg class="Svg UploadSvg">
+                <img src="/static/cloud.svg" class="Svg UploadSvg" />
+                {{!-- <svg class="Svg UploadSvg">
                     <use href="#cloud"></use>
                 </svg>
-                <input class="NoDisplay" name="files" type="file" accept="image/*, video/*" onchange="form.submit()" multiple/>
+                <input class="NoDisplay" name="files" type="file" accept="image/*, video/*" onchange="form.submit()" multiple/> --}}
             </label>
         </form>
     </div>
@@ -55,9 +32,7 @@
     <div class="DirWrap">
         {{#each contents}}
         <a href="{{this.url}}" class="ListItem">
-            <svg class="Svg">
-                <use href="#{{this.svg_icon}}"></use>
-            </svg>
+            <img src="/static/{{this.svg_icon}}.svg" class="Svg" />
             <div class="ItemInfo">
                 <div class="FileName">{{this.file_name}}</div>
                 <div class="Metadata">
