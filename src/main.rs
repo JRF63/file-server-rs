@@ -1,9 +1,11 @@
 mod index;
+mod upload;
 #[cfg(target_os = "windows")]
 mod windows;
 
-use actix_web::{web, App, HttpServer};
 use actix_files::Files;
+use actix_multipart::Multipart;
+use actix_web::{http::Method, web, App, Either, HttpRequest, HttpServer};
 use clap::Parser;
 use handlebars::Handlebars;
 use std::{
@@ -50,6 +52,25 @@ impl<'reg> AppState<'reg> {
     }
 }
 
+pub async fn catch_all(
+    data: web::Data<AppState<'_>>,
+    req: HttpRequest,
+    payload: Option<Multipart>,
+) -> Either<index::IndexResponseType, upload::UploadResponseType> {
+    // Forward slashes causes Windows to assume it's an absolute path to C:\
+    let no_starting_slash = req.path().trim_start_matches('/');
+
+    let path = percent_encoding::percent_decode(no_starting_slash.as_bytes())
+        .decode_utf8_lossy()
+        .to_string();
+
+    match *req.method() {
+        Method::GET => Either::Left(index::index(data, path).await),
+        Method::POST => Either::Right(upload::upload(data, req, path, payload.expect("POST has no payload")).await),
+        _ => todo!(),
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
@@ -61,7 +82,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(app_state_ref.clone())
             .service(Files::new("/static", "./static"))
-            .default_service(web::to(index::index))
+            .default_service(web::to(catch_all))
     })
     .bind(args.addr)?
     .run()

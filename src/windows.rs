@@ -1,10 +1,8 @@
+use std::{mem::MaybeUninit, os::windows::fs::MetadataExt};
 use windows::Win32::{
     Foundation::SYSTEMTIME,
     System::Time::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime},
 };
-
-use std::mem::MaybeUninit;
-use std::os::windows::fs::MetadataExt;
 
 pub fn get_metadata(metadata: &std::fs::Metadata) -> (u64, u64) {
     (metadata.file_size(), metadata.last_write_time())

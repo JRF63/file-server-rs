@@ -1,8 +1,6 @@
 use crate::AppState;
 use actix_files::NamedFile;
-use actix_web::{
-    http::header::http_percent_encode, web, Either, HttpRequest, HttpResponse, Responder,
-};
+use actix_web::{http::header::http_percent_encode, web, Either, HttpResponse};
 use serde::Serialize;
 use std::{
     fmt,
@@ -30,21 +28,12 @@ struct TemplateContext {
     contents: Vec<DirContent>,
 }
 
-pub async fn index(data: web::Data<AppState<'_>>, req: HttpRequest) -> impl Responder {
-    // Forward slashes causes Windows to assume it's an absolute path to C:\
-    let no_starting_slash = req.path().trim_start_matches('/');
+pub type IndexResponseType = Either<HttpResponse, std::io::Result<NamedFile>>;
 
-    let path = percent_encoding::percent_decode(no_starting_slash.as_bytes())
-        .decode_utf8_lossy()
-        .to_string();
-
-    handle_listing_files(data, path).await
-}
-
-async fn handle_listing_files(
+pub async fn index(
     data: web::Data<AppState<'_>>,
     web_path: String,
-) -> Either<HttpResponse, std::io::Result<NamedFile>> {
+) -> IndexResponseType {
     // Path on the server
     let local_path = data.serve_from.join(&web_path);
 
@@ -74,7 +63,7 @@ async fn handle_listing_files(
                 .expect("Handlebars failed at rendering");
             Either::Left(HttpResponse::Ok().body(body))
         }
-        Err(_) => Either::Right(NamedFile::open_async(local_path).await),
+        Err(_) => Either::Right(NamedFile::open_async(local_path).await), // TODO: Handlebars 404 page
     }
 }
 

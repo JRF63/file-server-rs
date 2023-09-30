@@ -1,91 +1,40 @@
-use multer::Multipart;
-use rocket::data::{Data, ToByteUnit};
-use rocket::http::hyper::header::LOCATION;
-use rocket::http::{self, ContentType};
-use rocket::request::Request;
-use rocket::response::{self, Responder, Response};
-use rocket::tokio::io::AsyncWriteExt;
-use std::path::{Path, PathBuf};
+use crate::AppState;
+use actix_multipart::Multipart;
+use actix_web::{http::header::LOCATION, web, HttpRequest, HttpResponse};
+use futures_util::TryStreamExt;
+use tokio::io::AsyncWriteExt;
 
-pub struct Reload;
+pub type UploadResponseType = Result<HttpResponse, actix_web::Error>;
 
-impl<'r> Responder<'r, 'r> for Reload {
-    fn respond_to(self, request: &'r Request<'_>) -> response::Result<'r> {
-        Response::build()
-            .status(http::Status::SeeOther)
-            .header(http::Header::new(
-                LOCATION.as_str(),
-                request.uri().path().as_str(),
-            ))
-            .ok()
-    }
-}
+pub async fn upload(
+    data: web::Data<AppState<'_>>,
+    req: HttpRequest,
+    web_path: String,
+    mut payload: Multipart,
+) -> UploadResponseType {
+    // Path on the server
+    let local_path = data.serve_from.join(&web_path);
 
-pub struct HttpStatus(http::Status);
+    while let Some(mut field) = payload.try_next().await? {
+        // A multipart/form-data stream has to contain `content_disposition`
+        let content_disposition = field.content_disposition();
 
-impl<'r> Responder<'r, 'static> for HttpStatus {
-    fn respond_to(self, request: &'r Request<'_>) -> response::Result<'static> {
-        self.0.respond_to(request)
-    }
-}
-
-#[allow(non_upper_case_globals)]
-impl HttpStatus {
-    const BadRequest: HttpStatus = HttpStatus(http::Status::BadRequest);
-    const Forbidden: HttpStatus = HttpStatus(http::Status::Forbidden);
-}
-
-impl From<std::io::Error> for HttpStatus {
-    fn from(_: std::io::Error) -> Self {
-        HttpStatus(http::Status::InternalServerError)
-    }
-}
-
-impl From<multer::Error> for HttpStatus {
-    fn from(_: multer::Error) -> Self {
-        HttpStatus(http::Status::BadRequest)
-    }
-}
-
-#[post("/<url_path..>", data = "<files>")]
-pub async fn upload_handler(
-    url_path: PathBuf,
-    content_type: &ContentType,
-    files: Data<'_>,
-) -> Result<Reload, HttpStatus> {
-    fn sanitize_file_name(file_name: Option<&str>) -> Option<String> {
-        file_name.and_then(|file_name| {
-            let extension = Path::new(file_name).extension()?.to_str()?;
-            let base_name = rocket::fs::FileName::new(file_name).as_str()?;
-            let mut sanitized = base_name.to_owned();
-            sanitized.push('.');
-            sanitized.push_str(extension);
-            Some(sanitized)
-        })
-    }
-
-    if content_type.is_form_data() {
-        let stream = files.open(crate::UPLOAD_SIZE_LIMIT_MIB.mebibytes());
-        let content_type = content_type.to_string();
-        let (_, boundary) = content_type.split_at(30);
-        let mut multipart = Multipart::with_reader(stream, boundary);
-
-        while let Some(mut field) = multipart.next_field().await? {
-            let file_name = sanitize_file_name(field.file_name()).ok_or(HttpStatus::BadRequest)?;
-            let path = Path::new(crate::FILES_DIR).join(&url_path).join(&file_name);
-
-            if path.exists() {
-                return Err(HttpStatus::Forbidden);
-            } else {
-                let mut file = rocket::tokio::fs::File::create(path).await?;
-                while let Some(mut chunk) = field.chunk().await? {
-                    while file.write_buf(&mut chunk).await? != 0 {}
-                }
-                file.sync_all().await?;
+        let path = match content_disposition.get_filename() {
+            Some(file_name) => local_path.join(file_name),
+            None => {
+                return Err(actix_web::error::ErrorInternalServerError(
+                    "Unable to get file name of upload",
+                ));
             }
+        };
+
+        let mut f = tokio::fs::File::create(path).await?;
+        while let Some(chunk) = field.try_next().await? {
+            f.write_all(&chunk).await?;
         }
-        Ok(Reload)
-    } else {
-        Err(HttpStatus::Forbidden)
     }
+
+    let mut response = HttpResponse::SeeOther();
+    response.append_header((LOCATION, req.path()));
+    Ok(response.finish())
 }

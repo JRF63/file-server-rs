@@ -1,53 +1,55 @@
-<!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-    <link rel="icon" href="/static/favicon.png">
-    <link rel="stylesheet" href="/static/layout.css">
+    <link rel="icon" href="/static/favicon.png" />
+    <link rel="stylesheet" href="/static/layout.css" />
     <title>File server</title>
-</head>
-<body>
+  </head>
+  <body>
     <div class="Header">
-        <a href="/">
-            <img src="/static/home.svg" class="Svg" />
-        </a>
-        <div class="Breadcrumbs">
-            {{#each breadcrumbs}}
-            <img src="/static/caret.svg" class="CrumbCaret" />
-            <a class="Breadcrumb" {{#if this.url}}href="{{this.url}}"{{/if}}>{{this.segment}}</a>
-            {{~/each}}
-        </div>
-        <form method="POST" enctype="multipart/form-data">
-            <label class="UploadLabel">
-                <img src="/static/cloud.svg" class="Svg UploadSvg" />
-                {{!-- <svg class="Svg UploadSvg">
-                    <use href="#cloud"></use>
-                </svg>
-                <input class="NoDisplay" name="files" type="file" accept="image/*, video/*" onchange="form.submit()" multiple/> --}}
-            </label>
-        </form>
-    </div>
-    
-    <div class="DirWrap">
-        {{#each contents}}
-        <a href="{{this.url}}" class="ListItem">
-            <img src="/static/{{this.svg_icon}}.svg" class="Svg" />
-            <div class="ItemInfo">
-                <div class="FileName">{{this.file_name}}</div>
-                <div class="Metadata">
-                    <div>{{this.date}}</div>
-                    <div class="FileSize">{{this.size}}</div>
-                </div>
-            </div>
-        </a>
+      <a href="/">
+        <img src="/static/home.svg" class="Svg" />
+      </a>
+      <div class="Breadcrumbs">
+        {{#each breadcrumbs}}
+        <img src="/static/caret.svg" class="CrumbCaret" />
+        <a class="Breadcrumb" {{#if this.url}}href="{{this.url}}"{{/if}}>{{this.segment}}</a>
         {{~/each}}
+      </div>
+      <form method="POST" enctype="multipart/form-data">
+        <label class="UploadLabel">
+          <img src="/static/cloud.svg" class="Svg UploadSvg" />
+          <input
+            class="NoDisplay"
+            name="files"
+            type="file"
+            accept="image/*, video/*"
+            onchange="form.submit()"
+            multiple
+          />
+        </label>
+      </form>
     </div>
-</body>
-<script>
-document.body.onload = () => {
-    const container = document.getElementsByClassName("Breadcrumbs")[0];
-    container.scrollLeft = container.scrollWidth;
-}
-</script>
+
+    <div class="DirWrap">
+      {{#each contents}}
+      <a href="{{this.url}}" class="ListItem">
+        <img src="/static/{{this.svg_icon}}.svg" class="Svg" />
+        <div class="ItemInfo">
+          <div class="FileName">{{this.file_name}}</div>
+          <div class="Metadata">
+            <div>{{this.date}}</div>
+            <div class="FileSize">{{this.size}}</div>
+          </div>
+        </div>
+      </a>
+      {{~/each}}
+    </div>
+  </body>
+  <script>
+    document.body.onload = () => { const container =
+    document.getElementsByClassName("Breadcrumbs")[0]; container.scrollLeft =
+    container.scrollWidth; }
+  </script>
 </html>
