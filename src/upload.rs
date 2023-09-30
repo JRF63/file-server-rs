@@ -1,40 +1,74 @@
 use crate::AppState;
 use actix_multipart::Multipart;
-use actix_web::{http::header::LOCATION, web, HttpRequest, HttpResponse};
+use actix_web::{
+    http::header::LOCATION,
+    web::{self, Payload},
+    FromRequest, HttpRequest, HttpResponse,
+};
 use futures_util::TryStreamExt;
 use tokio::io::AsyncWriteExt;
 
-pub type UploadResponseType = Result<HttpResponse, actix_web::Error>;
+pub type UploadResponseType = HttpResponse;
 
 pub async fn upload(
     data: web::Data<AppState<'_>>,
     req: HttpRequest,
+    payload: Option<Payload>,
     web_path: String,
-    mut payload: Multipart,
-) -> UploadResponseType {
-    // Path on the server
-    let local_path = data.serve_from.join(&web_path);
+) -> HttpResponse {
+    async fn inner(
+        data: &web::Data<AppState<'_>>,
+        req: HttpRequest,
+        payload: Option<Payload>,
+        web_path: String,
+    ) -> Result<HttpResponse, actix_web::Error> {
+        // Path on the server
+        let local_path = data.serve_from.join(&web_path);
 
-    while let Some(mut field) = payload.try_next().await? {
-        // A multipart/form-data stream has to contain `content_disposition`
-        let content_disposition = field.content_disposition();
-
-        let path = match content_disposition.get_filename() {
-            Some(file_name) => local_path.join(file_name),
+        let mut multipart_payload = match payload {
+            Some(p) => {
+                let mut inner = p.into_inner();
+                Multipart::from_request(&req, &mut inner).await?
+            }
             None => {
                 return Err(actix_web::error::ErrorInternalServerError(
-                    "Unable to get file name of upload",
-                ));
+                    "Missing payload on POST",
+                ))
             }
         };
 
-        let mut f = tokio::fs::File::create(path).await?;
-        while let Some(chunk) = field.try_next().await? {
-            f.write_all(&chunk).await?;
+        while let Some(mut field) = multipart_payload.try_next().await? {
+            // A multipart/form-data stream has to contain `content_disposition`
+            let content_disposition = field.content_disposition();
+
+            let path = match content_disposition.get_filename() {
+                Some(file_name) => local_path.join(file_name),
+                None => {
+                    return Err(actix_web::error::ErrorInternalServerError(
+                        "Unable to get file name of upload",
+                    ));
+                }
+            };
+
+            let mut f = tokio::fs::File::create(path).await?;
+            while let Some(chunk) = field.try_next().await? {
+                f.write_all(&chunk).await?;
+            }
         }
+
+        let mut response = HttpResponse::SeeOther();
+        response.append_header((LOCATION, req.path()));
+        Ok(response.finish())
     }
 
-    let mut response = HttpResponse::SeeOther();
-    response.append_header((LOCATION, req.path()));
-    Ok(response.finish())
+    match inner(&data, req, payload, web_path).await {
+        Ok(http_response) => http_response,
+        Err(e) => {
+            eprintln!("Upload error: {}", e);
+            return HttpResponse::InternalServerError().body(crate::error::render_error(
+                &data.hbs,
+                crate::error::HttpError::InternalServerError,
+            ));
+        }
+    }
 }

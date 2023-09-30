@@ -1,11 +1,15 @@
+mod error;
 mod index;
 mod upload;
 #[cfg(target_os = "windows")]
 mod windows;
 
 use actix_files::Files;
-use actix_multipart::Multipart;
-use actix_web::{http::Method, web, App, Either, HttpRequest, HttpServer};
+use actix_web::{
+    http::Method,
+    web::{self, Payload},
+    App, Either, HttpRequest, HttpServer,
+};
 use clap::Parser;
 use handlebars::Handlebars;
 use std::{
@@ -30,7 +34,7 @@ struct Args {
 
 pub struct AppState<'reg> {
     serve_from: PathBuf,
-    handlebars: Handlebars<'reg>,
+    hbs: Handlebars<'reg>,
 }
 
 impl<'reg> AppState<'reg> {
@@ -40,22 +44,18 @@ impl<'reg> AppState<'reg> {
             panic!("Root needs to be a directory");
         }
 
-        let mut handlebars = Handlebars::new();
-        handlebars
-            .register_templates_directory(HANDLEBARS_EXT, HANDLEBARS_TEMPLATE_FOLDER)
+        let mut hbs = Handlebars::new();
+        hbs.register_templates_directory(HANDLEBARS_EXT, HANDLEBARS_TEMPLATE_FOLDER)
             .expect("Error registering Handlebars templates");
 
-        Self {
-            serve_from,
-            handlebars,
-        }
+        Self { serve_from, hbs }
     }
 }
 
 pub async fn catch_all(
     data: web::Data<AppState<'_>>,
     req: HttpRequest,
-    payload: Option<Multipart>,
+    payload: Option<Payload>,
 ) -> Either<index::IndexResponseType, upload::UploadResponseType> {
     // Forward slashes causes Windows to assume it's an absolute path to C:\
     let no_starting_slash = req.path().trim_start_matches('/');
@@ -66,7 +66,7 @@ pub async fn catch_all(
 
     match *req.method() {
         Method::GET => Either::Left(index::index(data, path).await),
-        Method::POST => Either::Right(upload::upload(data, req, path, payload.expect("POST has no payload")).await),
+        Method::POST => Either::Right(upload::upload(data, req, payload, path).await),
         _ => todo!(),
     }
 }

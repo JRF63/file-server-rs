@@ -28,12 +28,9 @@ struct TemplateContext {
     contents: Vec<DirContent>,
 }
 
-pub type IndexResponseType = Either<HttpResponse, std::io::Result<NamedFile>>;
+pub type IndexResponseType = Either<HttpResponse, Either<NamedFile, HttpResponse>>;
 
-pub async fn index(
-    data: web::Data<AppState<'_>>,
-    web_path: String,
-) -> IndexResponseType {
+pub async fn index(data: web::Data<AppState<'_>>, web_path: String) -> IndexResponseType {
     // Path on the server
     let local_path = data.serve_from.join(&web_path);
 
@@ -58,12 +55,17 @@ pub async fn index(
                 contents,
             };
             let body = data
-                .handlebars
+                .hbs
                 .render("main", &context)
                 .expect("Handlebars failed at rendering");
             Either::Left(HttpResponse::Ok().body(body))
         }
-        Err(_) => Either::Right(NamedFile::open_async(local_path).await), // TODO: Handlebars 404 page
+        Err(_) => match NamedFile::open_async(local_path).await {
+            Ok(named_file) => Either::Right(Either::Left(named_file)),
+            Err(_) => Either::Right(Either::Right(HttpResponse::NotFound().body(
+                crate::error::render_error(&data.hbs, crate::error::HttpError::NotFound),
+            ))),
+        },
     }
 }
 
