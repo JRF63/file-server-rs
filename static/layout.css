@@ -1,17 +1,23 @@
 body {
+  margin: 0;
   background-color: hsl(0, 0%, 10%);
   color: hsl(0, 0%, 90%);
   font-family: "Consolas, 'Courier New', monospace";
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 a {
   color: currentColor;
   text-decoration: none;
 }
 .Header {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 1rem;
   display: flex;
   align-items: center;
   justify-content: left;
-  padding: 1rem;
   background-color: hsl(0, 0%, 8%);
 }
 .Breadcrumbs {
@@ -38,6 +44,9 @@ a {
   display: none;
 }
 .DirWrap {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 900px;
   display: flex;
   flex-direction: column;
 }
