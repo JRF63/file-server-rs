@@ -1,3 +1,5 @@
+use crate::os_specific::MetadataExtModified;
+
 use crate::AppState;
 use actix_files::NamedFile;
 use actix_web::{http::header::http_percent_encode, web, Either, HttpResponse};
@@ -118,11 +120,8 @@ async fn dir_contents(dir_path: &PathBuf) -> std::io::Result<Vec<DirContent>> {
 
         let metadata = entry.metadata().await?;
 
-        #[cfg(target_os = "windows")]
-        let (file_size, modified) = crate::windows::get_metadata(&metadata);
-
-        #[cfg(target_os = "windows")]
-        let date = crate::windows::get_date(modified)?;
+        let file_size = metadata.len();
+        let date = metadata.modified_date()?;
 
         let (vec, svg_icon) = if metadata.is_dir() {
             url.push('/');

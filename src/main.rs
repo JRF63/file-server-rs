@@ -1,8 +1,10 @@
 mod error;
 mod index;
 mod upload;
+
 #[cfg(target_os = "windows")]
-mod windows;
+#[path = "windows.rs"]
+mod os_specific;
 
 use actix_files::Files;
 use actix_web::{
@@ -77,6 +79,23 @@ async fn main() -> std::io::Result<()> {
 
     let app_state = AppState::new(&args.root);
     let app_state_ref = web::Data::new(app_state);
+
+    let mut ip_addr = args.addr.ip();
+    match ip_addr {
+        IpAddr::V4(addr) => {
+            if addr.is_unspecified() {
+                ip_addr = os_specific::default_ip_address(true)?;
+            }
+        }
+        IpAddr::V6(addr) => {
+            if addr.is_unspecified() {
+                ip_addr = os_specific::default_ip_address(false)?;
+            }
+        }
+    }
+    println!("Serving");
+    println!("    Directory: {}", args.root);
+    println!("    IP address: http://{}:{}", ip_addr, args.addr.port());
 
     HttpServer::new(move || {
         App::new()
