@@ -65,10 +65,10 @@ pub async fn upload(
         Ok(http_response) => http_response,
         Err(e) => {
             eprintln!("Upload error: {}", e);
-            return HttpResponse::InternalServerError().body(crate::error::render_error(
+            return crate::error::error_response(
                 &data.hbs,
                 crate::error::HttpError::InternalServerError,
-            ));
+            );
         }
     }
 }

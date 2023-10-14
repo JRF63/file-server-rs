@@ -648,6 +648,7 @@ dependencies = [
  "clap",
  "futures-util",
  "handlebars",
+ "mime",
  "percent-encoding",
  "sanitize-filename",
  "serde",

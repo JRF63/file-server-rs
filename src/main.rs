@@ -1,12 +1,13 @@
 mod error;
 mod index;
+mod statics;
 mod upload;
 
 #[cfg(target_os = "windows")]
 #[path = "windows.rs"]
 mod os_specific;
 
-use actix_files::Files;
+use actix_files::file_extension_to_mime;
 use actix_web::{
     http::Method,
     web::{self, Payload},
@@ -14,13 +15,15 @@ use actix_web::{
 };
 use clap::Parser;
 use handlebars::Handlebars;
+use mime::Mime;
 use std::{
+    collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
 };
 
-const HANDLEBARS_EXT: &str = ".html.hbs";
-const HANDLEBARS_TEMPLATE_FOLDER: &str = "./templates";
+const MAIN_TEMPLATE: &str = include_str!("../templates/main.html.hbs");
+const ERROR_TEMPLATE: &str = include_str!("../templates/error.html.hbs");
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -37,6 +40,7 @@ struct Args {
 pub struct AppState<'reg> {
     serve_from: PathBuf,
     hbs: Handlebars<'reg>,
+    static_files: HashMap<&'static str, (&'static [u8], Mime)>,
 }
 
 impl<'reg> AppState<'reg> {
@@ -46,11 +50,34 @@ impl<'reg> AppState<'reg> {
             panic!("Root needs to be a directory");
         }
 
-        let mut hbs = Handlebars::new();
-        hbs.register_templates_directory(HANDLEBARS_EXT, HANDLEBARS_TEMPLATE_FOLDER)
-            .expect("Error registering Handlebars templates");
+        macro_rules! include_static_file {
+            ($file_name:expr, $extension:expr) => {
+                (
+                    concat!($file_name, ".", $extension),
+                    (
+                        include_bytes!(concat!("../static/", $file_name, ".", $extension))
+                            as &'static [u8],
+                        file_extension_to_mime($extension),
+                    ),
+                )
+            };
+        }
 
-        Self { serve_from, hbs }
+        let files = [
+            include_static_file!("caret", "svg"),
+            include_static_file!("cloud", "svg"),
+            include_static_file!("favicon", "png"),
+            include_static_file!("file", "svg"),
+            include_static_file!("folder", "svg"),
+            include_static_file!("home", "svg"),
+            include_static_file!("layout", "css"),
+        ];
+
+        Self {
+            serve_from,
+            hbs: Handlebars::new(),
+            static_files: files.into(),
+        }
     }
 }
 
@@ -100,7 +127,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(app_state_ref.clone())
-            .service(Files::new("/static", "./static"))
+            .service(statics::serve_static_file)
             .default_service(web::to(catch_all))
     })
     .bind(args.addr)?

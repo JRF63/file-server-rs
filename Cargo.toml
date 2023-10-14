@@ -16,6 +16,7 @@ clap = { version = "4.4.6", features = [
 ] }
 futures-util = "0.3.28"
 handlebars = { version = "4.4.0", features = ["dir_source"] }
+mime = "0.3.17"
 percent-encoding = "2.3.0"
 sanitize-filename = "0.5.0"
 serde = { version = "1.0.188", features = ["derive"] }

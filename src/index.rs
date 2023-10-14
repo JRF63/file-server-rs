@@ -58,14 +58,16 @@ pub async fn index(data: web::Data<AppState<'_>>, web_path: String) -> IndexResp
             };
             let body = data
                 .hbs
-                .render("main", &context)
+                .render_template(crate::MAIN_TEMPLATE, &context)
                 .expect("Handlebars failed at rendering");
+
             Either::Left(HttpResponse::Ok().body(body))
         }
         Err(_) => match NamedFile::open_async(local_path).await {
             Ok(named_file) => Either::Right(Either::Left(named_file)),
-            Err(_) => Either::Right(Either::Right(HttpResponse::NotFound().body(
-                crate::error::render_error(&data.hbs, crate::error::HttpError::NotFound),
+            Err(_) => Either::Right(Either::Right(crate::error::error_response(
+                &data.hbs,
+                crate::error::HttpError::NotFound,
             ))),
         },
     }
