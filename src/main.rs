@@ -33,8 +33,12 @@ struct Args {
     root: String,
 
     /// Desired IP address of the server
-    #[arg(short, long, default_value_t = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080))]
-    addr: SocketAddr,
+    #[arg(short, long, default_value_t = IpAddr::V4(Ipv4Addr::UNSPECIFIED))]
+    addr: IpAddr,
+
+    /// Port that the server will use
+    #[arg(short, long, default_value_t = 8080)]
+    port: u16,
 }
 
 pub struct AppState<'reg> {
@@ -45,7 +49,9 @@ pub struct AppState<'reg> {
 
 impl<'reg> AppState<'reg> {
     fn new(serve_from: &str) -> Self {
-        let serve_from = PathBuf::from(serve_from);
+        let serve_from = PathBuf::from(serve_from)
+            .canonicalize()
+            .expect("Unable to canonicalize root directory");
         if !serve_from.is_dir() {
             panic!("Root needs to be a directory");
         }
@@ -107,7 +113,7 @@ async fn main() -> std::io::Result<()> {
     let app_state = AppState::new(&args.root);
     let app_state_ref = web::Data::new(app_state);
 
-    let mut ip_addr = args.addr.ip();
+    let mut ip_addr = args.addr;
     match ip_addr {
         IpAddr::V4(addr) => {
             if addr.is_unspecified() {
@@ -122,7 +128,7 @@ async fn main() -> std::io::Result<()> {
     }
     println!("Serving");
     println!("    Directory: {}", args.root);
-    println!("    IP address: http://{}:{}", ip_addr, args.addr.port());
+    println!("    IP address: http://{}:{}", ip_addr, args.port);
 
     HttpServer::new(move || {
         App::new()
@@ -130,7 +136,7 @@ async fn main() -> std::io::Result<()> {
             .service(statics::serve_static_file)
             .default_service(web::to(catch_all))
     })
-    .bind(args.addr)?
+    .bind(SocketAddr::new(ip_addr, args.port))?
     .run()
     .await
 }
