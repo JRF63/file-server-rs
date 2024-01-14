@@ -5,8 +5,9 @@ use std::{
 };
 use windows::Win32::{
     Foundation::{ERROR_BUFFER_OVERFLOW, ERROR_SUCCESS, SYSTEMTIME},
-    NetworkManagement::IpHelper::{
-        GetAdaptersAddresses, GET_ADAPTERS_ADDRESSES_FLAGS, IP_ADAPTER_ADDRESSES_LH,
+    NetworkManagement::{
+        IpHelper::{GetAdaptersAddresses, GET_ADAPTERS_ADDRESSES_FLAGS, IP_ADAPTER_ADDRESSES_LH},
+        Ndis::IfOperStatusUp,
     },
     Networking::WinSock::{AF_INET, AF_INET6, SOCKADDR_IN, SOCKADDR_IN6},
     System::Time::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime},
@@ -132,7 +133,7 @@ impl IpAdapterAddresses {
     }
 }
 
-/// Returns the IP address of the default network interface.
+/// Returns the IP address of the first network interface that is up/enabled.
 pub fn default_ip_address(use_ipv4: bool) -> std::io::Result<IpAddr> {
     let family = if use_ipv4 { AF_INET } else { AF_INET6 };
 
@@ -169,24 +170,27 @@ pub fn default_ip_address(use_ipv4: bool) -> std::io::Result<IpAddr> {
     }
 
     unsafe {
-        let mut unicast_addr = (*ip_adapter_addresses.as_inner()).FirstUnicastAddress;
-        while !unicast_addr.is_null() {
-            let socket_addr = (*unicast_addr).Address;
-            let addr = socket_addr.lpSockaddr;
-            match (*addr).sa_family {
-                AF_INET if use_ipv4 => {
-                    let addr: *mut SOCKADDR_IN = addr as *mut SOCKADDR_IN;
-                    let addr_bytes = (*addr).sin_addr.S_un.S_addr;
-                    return Ok(IpAddr::V4(Ipv4Addr::from(addr_bytes.swap_bytes())));
+        let mut curr_addr = ip_adapter_addresses.as_inner();
+        while !curr_addr.is_null() {
+            if (*curr_addr).OperStatus == IfOperStatusUp {
+                let unicast_addr = (*curr_addr).FirstUnicastAddress;
+                let socket_addr = (*unicast_addr).Address;
+                let addr = socket_addr.lpSockaddr;
+                match (*addr).sa_family {
+                    AF_INET if use_ipv4 => {
+                        let addr: *mut SOCKADDR_IN = addr as *mut SOCKADDR_IN;
+                        let addr_bytes = (*addr).sin_addr.S_un.S_addr;
+                        return Ok(IpAddr::V4(Ipv4Addr::from(addr_bytes.swap_bytes())));
+                    }
+                    AF_INET6 if !use_ipv4 => {
+                        let sockaddr: *mut SOCKADDR_IN6 = addr as *mut SOCKADDR_IN6;
+                        let addr_bytes = (*sockaddr).sin6_addr.u.Byte;
+                        return Ok(IpAddr::V6(Ipv6Addr::from(addr_bytes)));
+                    }
+                    _ => (),
                 }
-                AF_INET6 if !use_ipv4 => {
-                    let sockaddr: *mut SOCKADDR_IN6 = addr as *mut SOCKADDR_IN6;
-                    let addr_bytes = (*sockaddr).sin6_addr.u.Byte;
-                    return Ok(IpAddr::V6(Ipv6Addr::from(addr_bytes)));
-                }
-                _ => (),
             }
-            unicast_addr = (*unicast_addr).Next;
+            curr_addr = (*curr_addr).Next;
         }
     }
 
