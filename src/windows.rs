@@ -127,9 +127,8 @@ impl IpAdapterAddresses {
 
         let count = div_ceil(req_bytes as _, STRUCT_SIZE);
 
-        let layout = std::alloc::Layout::array::<IP_ADAPTER_ADDRESSES_LH>(count)
-            .expect("Unable to construct layout");
-        layout
+        std::alloc::Layout::array::<IP_ADAPTER_ADDRESSES_LH>(count)
+            .expect("Unable to construct layout")
     }
 }
 

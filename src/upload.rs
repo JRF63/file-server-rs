@@ -65,10 +65,7 @@ pub async fn upload(
         Ok(http_response) => http_response,
         Err(e) => {
             eprintln!("Upload error: {}", e);
-            return crate::error::error_response(
-                &data.hbs,
-                crate::error::HttpError::InternalServerError,
-            );
+            crate::error::error_response(&data.hbs, crate::error::HttpError::InternalServerError)
         }
     }
 }

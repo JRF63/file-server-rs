@@ -8,17 +8,15 @@ mod upload;
 #[path = "windows.rs"]
 mod os_specific;
 
-use actix_files::file_extension_to_mime;
 use actix_web::{
     http::Method,
     web::{self, Payload},
     App, Either, HttpRequest, HttpServer,
 };
+use aho_corasick::AhoCorasick;
 use clap::Parser;
 use handlebars::Handlebars;
-use mime::Mime;
 use std::{
-    collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
 };
@@ -49,7 +47,7 @@ struct Args {
 pub struct AppState<'reg> {
     serve_from: PathBuf,
     hbs: Handlebars<'reg>,
-    static_files: HashMap<&'static str, (&'static [u8], Mime)>,
+    ac: AhoCorasick,
 }
 
 impl<'reg> AppState<'reg> {
@@ -61,33 +59,33 @@ impl<'reg> AppState<'reg> {
             panic!("Root needs to be a directory");
         }
 
-        macro_rules! include_static_file {
-            ($file_name:expr, $extension:expr) => {
-                (
-                    concat!($file_name, ".", $extension),
-                    (
-                        include_bytes!(concat!("../static/", $file_name, ".", $extension))
-                            as &'static [u8],
-                        file_extension_to_mime($extension),
-                    ),
-                )
-            };
-        }
+        // macro_rules! include_static_file {
+        //     ($file_name:expr, $extension:expr) => {
+        //         (
+        //             concat!($file_name, ".", $extension),
+        //             (
+        //                 include_bytes!(concat!("../static/", $file_name, ".", $extension))
+        //                     as &'static [u8],
+        //                 file_extension_to_mime($extension),
+        //             ),
+        //         )
+        //     };
+        // }
 
-        let files = [
-            include_static_file!("caret", "svg"),
-            include_static_file!("cloud", "svg"),
-            include_static_file!("favicon", "png"),
-            include_static_file!("file", "svg"),
-            include_static_file!("folder", "svg"),
-            include_static_file!("home", "svg"),
-            include_static_file!("layout", "css"),
-        ];
+        // let files = [
+        //     include_static_file!("caret", "svg"),
+        //     include_static_file!("cloud", "svg"),
+        //     include_static_file!("favicon", "png"),
+        //     include_static_file!("file", "svg"),
+        //     include_static_file!("folder", "svg"),
+        //     include_static_file!("home", "svg"),
+        //     include_static_file!("layout", "css"),
+        // ];
 
         Self {
             serve_from,
             hbs: Handlebars::new(),
-            static_files: files.into(),
+            ac: statics::build_aho_corasick(),
         }
     }
 }
