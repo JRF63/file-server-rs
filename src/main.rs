@@ -1,6 +1,7 @@
 mod error;
 mod index;
 mod statics;
+mod tls_server_config;
 mod upload;
 
 #[cfg(target_os = "windows")]
@@ -39,6 +40,10 @@ struct Args {
     /// Port that the server will use
     #[arg(short, long, default_value_t = 8080)]
     port: u16,
+
+    /// Enable/disable TLS
+    #[arg(short, long, default_value_t = true)]
+    tls: bool,
 }
 
 pub struct AppState<'reg> {
@@ -126,17 +131,27 @@ async fn main() -> std::io::Result<()> {
             }
         }
     }
+
+    let suffix = if args.tls { "s" } else { "" };
     println!("Serving");
     println!("    Directory: {}", args.root);
-    println!("    IP address: http://{}:{}", ip_addr, args.port);
+    println!("    IP address: http{}://{}:{}", suffix, ip_addr, args.port);
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .app_data(app_state_ref.clone())
             .service(statics::serve_static_file)
             .default_service(web::to(catch_all))
-    })
-    .bind(SocketAddr::new(ip_addr, args.port))?
-    .run()
-    .await
+    });
+
+    let server = if args.tls {
+        server.bind_rustls_021(
+            SocketAddr::new(ip_addr, args.port),
+            tls_server_config::server_config(ip_addr),
+        )?
+    } else {
+        server.bind(SocketAddr::new(ip_addr, args.port))?
+    };
+
+    server.run().await
 }
